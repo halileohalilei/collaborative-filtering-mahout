@@ -42,3 +42,14 @@ com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
 fabric.properties
+
+# Database files
+*.csv
+*.sqlite
+
+# Build directory
+/target/
+
+# .gitignore autosave file
+.gitignore~
+*.~lock.connections.csv#
