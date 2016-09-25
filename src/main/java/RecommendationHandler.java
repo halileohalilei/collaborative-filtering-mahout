@@ -1,9 +1,12 @@
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import org.apache.mahout.cf.taste.common.NoSuchUserException;
 import org.apache.mahout.cf.taste.common.TasteException;
 import org.apache.mahout.cf.taste.model.IDMigrator;
 import org.apache.mahout.cf.taste.recommender.RecommendedItem;
 import org.apache.mahout.cf.taste.recommender.Recommender;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.ObjectWriter;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -12,6 +15,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,7 +25,9 @@ import java.util.Map;
 public class RecommendationHandler extends BaseHttpHandler {
 
     public void handle(HttpExchange httpExchange) throws IOException {
-        String response = "This is the response";
+        Headers headers = httpExchange.getResponseHeaders();
+        headers.set(HEADER_CONTENT_TYPE, String.format("application/json; charset=%s", CHARSET));
+        String response = "";
         Map<String, String> params = getParams(httpExchange);
         String userID = params.get("userID");
         int per = Integer.parseInt(params.get("per"));
@@ -36,14 +42,17 @@ public class RecommendationHandler extends BaseHttpHandler {
                 IDMigrator idMigrator = RecommendationServer.getMemoryIDMigrator();
 
                 recommendations = recommender.recommend(idMigrator.toLongID(userID), page * per);
-                List<String> actorNames = getActorNamesFromIDs(recommendations.subList((page - 1) * per, page * per));
-                for (String actorName : actorNames)
-                {
-                    System.out.println(actorName);
-                    response += "\n" + actorName;
-                }
+                List<Map<String, String>> actors = getRecommendedActors(recommendations.subList((page - 1) * per, page * per));
+                ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+                String json = ow.writeValueAsString(actors);
+                response += json;
+                System.out.println(json);
             } catch (NoSuchUserException e) {
-                //TODO: get regular actor names if the user doesn't follow anyone
+                List<Map<String, String>> actors = getRegularActors(page, per);
+                ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+                String json = ow.writeValueAsString(actors);
+                response += json;
+                System.out.println(json);
             } catch (TasteException e) {
                 e.printStackTrace();
             }
@@ -54,9 +63,40 @@ public class RecommendationHandler extends BaseHttpHandler {
         os.close();
     }
 
+    private List<Map<String, String>> getRegularActors(int page, int per)
+    {
+        String queryString = "select * from people limit " + per + " offset " + (page - 1) * per;
+        Connection c;
+        Statement stmt;
+        List<Map<String, String>> actors = new ArrayList<Map<String, String>>();
+        try {
+            Class.forName("org.sqlite.JDBC");
+            c = DriverManager.getConnection("jdbc:sqlite:movie_star_data.sqlite");
+            c.setAutoCommit(false);
 
+            stmt = c.createStatement();
+            ResultSet rs = stmt.executeQuery(queryString);
+            while ( rs.next() ) {
+                Map<String, String> actor = new HashMap<String, String>();
+                String actorID = rs.getString("star_id");
+                String actorName = rs.getString("star_name");
+                actor.put("actorID", actorID);
+                actor.put("actorName", actorName);
+                actors.add(actor);
+            }
+            rs.close();
+            stmt.close();
+            c.close();
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+        return actors;
+    }
 
-    private List<String> getActorNamesFromIDs(List<RecommendedItem> recommendations) throws TasteException {
+    private List<Map<String, String>> getRecommendedActors(List<RecommendedItem> recommendations)
+            throws TasteException {
         IDMigrator idMigrator = RecommendationServer.getMemoryIDMigrator();
         String queryString = "select * from people where star_id in (";
         for (int i = 0; i < recommendations.size(); i++)
@@ -72,7 +112,7 @@ public class RecommendationHandler extends BaseHttpHandler {
 
         Connection c;
         Statement stmt;
-        List<String> actorNames = new ArrayList<String>();
+        List<Map<String, String>> actors = new ArrayList<Map<String, String>>();
         try {
             Class.forName("org.sqlite.JDBC");
             c = DriverManager.getConnection("jdbc:sqlite:movie_star_data.sqlite");
@@ -81,8 +121,12 @@ public class RecommendationHandler extends BaseHttpHandler {
             stmt = c.createStatement();
             ResultSet rs = stmt.executeQuery(queryString);
             while ( rs.next() ) {
+                Map<String, String> actor = new HashMap<String, String>();
+                String actorID = rs.getString("star_id");
                 String actorName = rs.getString("star_name");
-                actorNames.add(actorName);
+                actor.put("actorID", actorID);
+                actor.put("actorName", actorName);
+                actors.add(actor);
             }
             rs.close();
             stmt.close();
@@ -93,6 +137,6 @@ public class RecommendationHandler extends BaseHttpHandler {
             e.printStackTrace();
         }
 
-        return actorNames;
+        return actors;
     }
 }

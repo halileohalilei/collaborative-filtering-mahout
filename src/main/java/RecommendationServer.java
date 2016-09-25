@@ -37,7 +37,7 @@ public class RecommendationServer {
     }
 
     private static void startServer() throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(3000), 0);
         server.createContext("/people", new RecommendationHandler());
         server.createContext("/follow", new FollowHandler());
         server.setExecutor(null); // creates a default executor
