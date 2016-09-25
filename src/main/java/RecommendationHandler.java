@@ -9,7 +9,6 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.ObjectWriter;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -27,7 +26,8 @@ public class RecommendationHandler extends BaseHttpHandler {
     public void handle(HttpExchange httpExchange) throws IOException {
         Headers headers = httpExchange.getResponseHeaders();
         headers.set(HEADER_CONTENT_TYPE, String.format("application/json; charset=%s", CHARSET));
-        String response = "";
+        int statusCode = STATUS_OK;
+        String response = null;
         Map<String, String> params = getParams(httpExchange);
         String userID = params.get("userID");
         int per = Integer.parseInt(params.get("per"));
@@ -44,23 +44,19 @@ public class RecommendationHandler extends BaseHttpHandler {
                 recommendations = recommender.recommend(idMigrator.toLongID(userID), page * per);
                 List<Map<String, String>> actors = getRecommendedActors(recommendations.subList((page - 1) * per, page * per));
                 ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-                String json = ow.writeValueAsString(actors);
-                response += json;
-                System.out.println(json);
+                response = ow.writeValueAsString(actors);
+//                System.out.println(response);
             } catch (NoSuchUserException e) {
                 List<Map<String, String>> actors = getRegularActors(page, per);
-                ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-                String json = ow.writeValueAsString(actors);
-                response += json;
-                System.out.println(json);
+                response = getAsJSON(actors);
+//                System.out.println(response);
             } catch (TasteException e) {
                 e.printStackTrace();
+                statusCode = STATUS_INTERNAL_SERVER_ERROR;
+                response = "";
             }
         }
-        httpExchange.sendResponseHeaders(200, response.length());
-        OutputStream os = httpExchange.getResponseBody();
-        os.write(response.getBytes());
-        os.close();
+        sendResponse(httpExchange, response, statusCode);
     }
 
     private List<Map<String, String>> getRegularActors(int page, int per)

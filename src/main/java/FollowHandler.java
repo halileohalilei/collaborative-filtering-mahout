@@ -1,8 +1,10 @@
 import com.sun.net.httpserver.HttpExchange;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.map.ObjectWriter;
 
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -22,11 +24,14 @@ public class FollowHandler extends BaseHttpHandler {
         pw.close();
         RecommendationServer.trainRecommender();
 
-        String response = userID + " followed " + starID;
+        Map<String, String> response = new HashMap<>();
+        response.put("Result", "OK");
+        response.put("userID", userID);
+        response.put("starID", starID);
 
-        httpExchange.sendResponseHeaders(200, response.length());
-        OutputStream os = httpExchange.getResponseBody();
-        os.write(response.getBytes());
-        os.close();
+        ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+        String jsonResponse = ow.writeValueAsString(response);
+
+        sendResponse(httpExchange, jsonResponse, STATUS_OK);
     }
 }
